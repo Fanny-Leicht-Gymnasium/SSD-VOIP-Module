@@ -8,11 +8,6 @@ import util.env as env
 import logging
 
 async def main():
-    await tts.generate_wav(
-        "Willkommen beim IVR Bot. Drücke 1 für OK, 2 für Abbruch, 9 zum Beenden.",
-        "general/welcome",
-    )
-
     bot = asterisk.ARIIVR()
     bot.run()
 

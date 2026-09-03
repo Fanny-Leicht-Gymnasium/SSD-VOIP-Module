@@ -33,18 +33,26 @@ class WSHandler:
         self.SystemErrors = ""
     def set_errors(self, errors: str):
         self.SystemErrors = errors
-    
     async def connect(self):
-        url = f"{self.url}?key={self.key}&client_type={self.SystemType}"
-        logger.info(url)
-        self.ws = await websockets.connect(url,
-        ping_interval=20,
-        ping_timeout=20)
-        logger.info(f"aaaaaaaaaaaaaaaaaaaConnected")
-        self.running=True
-        # start background receiver
-        self.listen_task = asyncio.create_task(self._receive_loop())
+        headers = {
+            "Authorization": f"Bearer {self.key}",
+        }
 
+        url = f"{self.url}?client_type={self.SystemType}"
+
+        self.ws = await websockets.connect(
+            url,
+            additional_headers=headers,
+            ping_interval=20,
+            ping_timeout=20,
+        )
+
+        logger.info("WebSocket connected")
+
+        self.running = True
+
+        # Start background receiver
+        self.listen_task = asyncio.create_task(self._receive_loop())
     async def send_raw(self, message: str):
         if not self.ws:
             raise RuntimeError("WebSocket not connected")
