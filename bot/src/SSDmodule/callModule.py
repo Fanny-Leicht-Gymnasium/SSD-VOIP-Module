@@ -95,6 +95,20 @@ class CallModule(WSHandler):
                 else:
                     logger.info(f"No active call session for thread_id {thread_id}")
                     await self.send("Call", "error", thread_id, {"message": "No active call session", "errorCode": "no_active_call_session"})
+
+            case "skip_playback":
+                if session and session.connected:
+                    if not session.skip_playback():
+                        await self.send("Call", "error", thread_id, {"message": "No active playback", "errorCode": "no_active_playback"})
+                else:
+                    await self.send("Call", "error", thread_id, {"message": "No active call session", "errorCode": "no_active_call_session"})
+
+            case "end_call_after_queue":
+                if session and session.connected:
+                    session.set_end_call_after_queue(data.get("enabled", True))
+                    logger.info(f"Set end_call_after_queue to {data.get('enabled', True)} for thread_id {thread_id}")
+                else:
+                    await self.send("Call", "error", thread_id, {"message": "No active call session", "errorCode": "no_active_call_session"})
                     
             case "dtmf_programming":
                 if not session:

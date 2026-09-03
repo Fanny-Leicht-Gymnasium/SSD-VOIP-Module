@@ -84,6 +84,12 @@ class WSHandler:
     async def on_message(self, message: str):
         try:
             data = json.loads(message)
+            if isinstance(data.get("data"), str):
+                try:
+                    data["data"] = json.loads(data["data"])
+                except json.JSONDecodeError:
+                    logger.warning("Ignoring event with invalid JSON data: %s", data)
+                    return
             await self.on_event(data)
         except json.JSONDecodeError:
             logger.info(f"Received non-JSON message: {message}")

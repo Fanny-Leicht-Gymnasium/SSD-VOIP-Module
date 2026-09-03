@@ -121,6 +121,18 @@ class ARIIVR:
         )
 
         self.log.info("PLAY START: %s (%s)", sound, r.status_code)
+        if r.ok:
+            try:
+                return r.json().get("id")
+            except ValueError:
+                pass
+        return None
+
+    def _stop_playback(self, playback_id: str) -> bool:
+        url = f"{self.ari_url}/ari/playbacks/{playback_id}"
+        response = requests.delete(url, auth=(self.ari_user, self.ari_password))
+        self.log.info("PLAY SKIP: %s (%s)", playback_id, response.status_code)
+        return response.ok
 
     def playback_finished(self, channel_id: str):
         session = self.get_session(channel_id)

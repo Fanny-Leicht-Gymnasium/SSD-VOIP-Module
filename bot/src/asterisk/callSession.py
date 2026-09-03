@@ -19,8 +19,11 @@ class CallSession:
         self._channel_id: str = channel_id
         self._playback_queue: list[str] = []
         self._active_playback: str = None
+        self._active_playback_id: str = None
         self._connected: bool = False
         self._call_ended: bool = False
+        self._end_call_after_queue: bool = False
+        self._pending_tts: int = 0
         self._asterisk_session: ARIIVR = asterisk_session
         
         self._que_pause = False
@@ -61,6 +64,11 @@ class CallSession:
             self._active_playback = value
 
     @property
+    def active_playback_id(self):
+        with self._lock:
+            return self._active_playback_id
+
+    @property
     def connected(self) -> bool:
         with self._lock:
             return self._connected
@@ -97,19 +105,27 @@ class CallSession:
     
     def on_playback_finished(self):
         if self.call_ended:
-            raise RuntimeError("Session ended already.")
+            return
 
+        should_hangup = False
         with self._lock:
             if self._active_playback is not None and self._active_playback.startswith("auto-tts/"):
                 self.delete_tts(self._active_playback)
+            self._active_playback_id = None
             if self._que_pause:
                 self._active_playback = None
             else:
                 if len(self._playback_queue)>0:
                     self._active_playback = self._playback_queue.pop(0)
-                    self._asterisk_session._play_sound(self.channel_id, self._active_playback)
+                    self._active_playback_id = self._asterisk_session._play_sound(
+                        self.channel_id, self._active_playback
+                    )
                 else:
                     self._active_playback = None
+                    should_hangup = self._end_call_after_queue and self._pending_tts == 0
+
+        if should_hangup:
+            self.hangup()
         
     def play_queue(self):
         if self.call_ended:
@@ -121,8 +137,9 @@ class CallSession:
             if self._active_playback is None:
                 if len(self._playback_queue)>0:
                     self._active_playback = self._playback_queue.pop(0)
-                    #if self._active_playback is not None:
-                    self._asterisk_session._play_sound(self.channel_id, self._active_playback)
+                    self._active_playback_id = self._asterisk_session._play_sound(
+                        self.channel_id, self._active_playback
+                    )
 
             else:
                 # TODO: Log already playing
@@ -132,6 +149,25 @@ class CallSession:
         """Will finish playing active file and then pause."""
         with self._lock:
             self._que_pause = True
+
+    def skip_playback(self):
+        with self._lock:
+            if self._active_playback_id is None:
+                return False
+            return self._asterisk_session._stop_playback(self._active_playback_id)
+
+    def set_end_call_after_queue(self, enabled: bool):
+        with self._lock:
+            self._end_call_after_queue = bool(enabled)
+            should_hangup = (
+                self._end_call_after_queue
+                and self._active_playback is None
+                and not self._playback_queue
+                and self._pending_tts == 0
+                and self._connected
+            )
+        if should_hangup:
+            self.hangup()
     
     def call(self, number: str):
         if self.call_ended:
@@ -159,16 +195,33 @@ class CallSession:
     async def play_tts(self, text: str):
         logger.info("1111111111111111")
         if self.call_ended:
-            raise RuntimeError("Session ended already.")
+            logger.info("Ignoring TTS request for ended session")
+            return
+        with self._lock:
+            self._pending_tts += 1
         logger.info("??????????")
-        name = await self.create_tts(text)
-        logger.info("created tts")
-        if self.call_ended:
-            self._delete_tts(name)
-            raise RuntimeError("Session ended already.")
-        self.add_to_queue(name)
-        
-        self.play_queue()
+        name = None
+        try:
+            name = await self.create_tts(text)
+            logger.info("created tts")
+            if self.call_ended:
+                self.delete_tts(name)
+                return
+            self.add_to_queue(name)
+            self.play_queue()
+        finally:
+            should_hangup = False
+            with self._lock:
+                self._pending_tts -= 1
+                should_hangup = (
+                    self._end_call_after_queue
+                    and self._pending_tts == 0
+                    and self._active_playback is None
+                    and not self._playback_queue
+                    and self._connected
+                )
+            if should_hangup:
+                self.hangup()
     
     def is_connected(self):
         return self.connected
