@@ -1,2 +1,4 @@
 sounds/auto-tts
-asterisk
+/asterisk
+__pycache__
+.venv
