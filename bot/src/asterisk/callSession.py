@@ -108,6 +108,8 @@ class CallSession:
                 if len(self._playback_queue)>0:
                     self._active_playback = self._playback_queue.pop(0)
                     self._asterisk_session._play_sound(self.channel_id, self._active_playback)
+                else:
+                    self._active_playback = None
         
     def play_queue(self):
         if self.call_ended:
