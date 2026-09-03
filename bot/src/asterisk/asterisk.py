@@ -261,7 +261,7 @@ if __name__ == "__main__":
     session2 = bot.get_session("test2")
     asyncio.run(session2.play_tts("Auto TTS estellt."))
     session2.add_multiple_to_queue(["test/test","test/test","test/test"])
-    session2.call("**612")
+    session2.call("**9")
     
     
     session1 = bot.get_session("originate")
