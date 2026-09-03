@@ -10,6 +10,8 @@ DEFAULT_ARI_PASSWORD = "secret"
 DEFAULT_APP_NAME = "ivrbot"
 DEFAULT_TARGET_NUMBER = "**621"
 DEFAULT_CALL_ENDPOINT = "fritzbox-endpoint"
+DEFAULT_MODULE_WS_URL = "ws://localhost:8080/system/moduleWS"
+DEFAULT_MODULE_WS_KEY = "gsm-secret-key"
 
 def _to_env_key(default_name: str) -> str:
     # DEFAULT_ARI_URL -> ARI_URL
