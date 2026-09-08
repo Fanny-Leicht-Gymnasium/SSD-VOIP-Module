@@ -67,20 +67,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image (no push)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
         run: |
           cd bot
-          docker build \
+
+          docker buildx build \
+            --platform linux/amd64,linux/arm64,linux/arm/v7 \
             --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
             --build-arg PIPER_MODELS="none" \
             -t "${{ needs.set-envs.outputs.image }}" \
+            --output type=oci,dest=../image.tar \
             .
 
-      - name: Save docker image
-        run: |
-          docker save ${{ needs.set-envs.outputs.image }} -o image.tar
-
-      - name: Upload artifact
+      - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
           name: docker-image
@@ -99,25 +104,23 @@ jobs:
         with:
           name: docker-image
 
-      - name: Load docker image
+      - name: Load Docker image
         run: |
           docker load -i image.tar
 
       - name: Login GHCR
-        uses: docker/login-action@v2 
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push branch + stable
+      - name: Push branch image
         run: |
-          IMAGE=${{ needs.set-envs.outputs.docker_repository }}
-          BRANCH=${{ needs.set-envs.outputs.branch }}
+          IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
+          BRANCH="${{ needs.set-envs.outputs.branch }}"
 
-          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:${BRANCH}
-
-          docker push ${IMAGE}:${BRANCH}
+          docker push "${IMAGE}:${BRANCH}"
 
 
 
@@ -132,6 +135,10 @@ jobs:
             goarch: amd64
           - name: linux-arm64
             goarch: arm64
+
+          - name: linux-armv7
+            goarch: arm
+            goarm: 7
 
     steps:
       - uses: actions/checkout@v4
@@ -158,8 +165,12 @@ jobs:
           echo "Branch:        ${BUILD_BRANCH}"
           echo "Build version: ${BUILD_VERSION}"
           echo "Architecture:  ${{ matrix.goarch }}"
+          echo "GOARM:         ${{ matrix.goarm }}"
 
-          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
+          CGO_ENABLED=0 \
+          GOOS=linux \
+          GOARCH=${{ matrix.goarch }} \
+          GOARM=${{ matrix.goarm }} \
           go build \
             -ldflags="-s -w \
                       -X main.version=${BUILD_VERSION} \
@@ -211,12 +222,18 @@ jobs:
           name: ssd-voip-tui-linux-arm64
           path: tui
 
+      - name: Download TUI armv7
+        uses: actions/download-artifact@v4
+        with:
+          name: ssd-voip-tui-linux-armv7
+          path: tui
+
       - name: Load Docker image
         run: |
           docker load -i image.tar
 
       - name: Login GHCR
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -245,6 +262,7 @@ jobs:
           sha256sum \
             ssd-voip-tui-linux-amd64 \
             ssd-voip-tui-linux-arm64 \
+            ssd-voip-tui-linux-armv7 \
             > checksums.txt
 
       - name: Create GitHub Release
@@ -257,6 +275,7 @@ jobs:
             --generate-notes \
             ssd-voip-tui-linux-amd64 \
             ssd-voip-tui-linux-arm64 \
+            ssd-voip-tui-linux-armv7 \
             checksums.txt
 
 
