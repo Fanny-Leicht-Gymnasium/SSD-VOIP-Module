@@ -37,6 +37,7 @@ type dockerCommandMsg struct {
 }
 type dockerStatusMsg struct{ Asterisk, Bot string }
 type statusTickMsg struct{}
+type updateCheckTickMsg struct{}
 
 type Model struct {
 	width, height                            int
@@ -63,6 +64,11 @@ type Model struct {
 	selecting      bool
 	selectFiltered []PiperVoice
 	selectCursor   int
+
+	updateAvailable bool
+	latestVersion   string
+	updateURL       string
+	updating        bool
 }
 
 func NewModel() *Model {
@@ -75,7 +81,16 @@ func NewModel() *Model {
 	return m
 }
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.refreshDockerStatus(), tea.Tick(3*time.Second, func(time.Time) tea.Msg { return statusTickMsg{} }))
+	return tea.Batch(
+		m.refreshDockerStatus(),
+		checkForUpdate(),
+		tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			return statusTickMsg{}
+		}),
+		tea.Tick(24*time.Hour, func(time.Time) tea.Msg {
+			return updateCheckTickMsg{}
+		}),
+	)
 }
 func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
@@ -101,6 +116,38 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case dockerStatusMsg:
 		m.asteriskStatus, m.botStatus = msg.Asterisk, msg.Bot
+	case versionCheckMsg:
+		m.latestVersion = msg.LatestVersion
+
+		if msg.Err != nil {
+			m.statusMessage = "Error while checking for Update: " + msg.Err.Error()
+			return m, nil
+		}
+
+		if msg.DownloadURL != "" {
+			m.updateAvailable = true
+			m.updateURL = msg.DownloadURL
+			m.statusMessage = "Update available: " + msg.LatestVersion + " (press U)"
+		} else {
+			m.statusMessage = "No update available."
+		}
+
+	case updateResultMsg:
+		m.updating = false
+
+		if msg.Err != nil {
+			m.statusMessage = "Update failed: " + msg.Err.Error()
+		} else {
+			m.statusMessage = msg.Status
+		}
+	case updateCheckTickMsg:
+		m.statusMessage = "Checking for updates...."
+		return m, tea.Batch(
+			checkForUpdate(),
+			tea.Tick(24*time.Hour, func(time.Time) tea.Msg {
+				return updateCheckTickMsg{}
+			}),
+		)
 	case tea.KeyMsg:
 		return m, m.handleKey(msg)
 	}
@@ -259,6 +306,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.viewport.SetContent("Docker logs cleared")
 	case "l":
 		m.focus = FocusLogs
+	case "u":
+		if m.updateAvailable && !m.updating {
+			m.updating = true
+			m.statusMessage = "Downloading update..."
+
+			return updateTUI(m.updateURL)
+		} else {
+			if !m.updateAvailable {
+				m.statusMessage = "Checking for updates...."
+				return checkForUpdate()
+			}
+		}
 	case "h":
 		return openShell()
 	case "esc":
@@ -606,7 +665,7 @@ func (m *Model) renderLogsSized(width, height int) string {
 func (m *Model) renderFooter() string {
 	return helpStyle.Render(
 		"Up/Down navigate  Left/Right page/scroll  Enter edit  Tab focus  F fullscreen  " +
-			"1/2/3 logs  S save  T ARI  R restart  O start  B fetch voice  X stop  H shell  Q quit\n" +
+			"1/2/3 logs  S save  T ARI  R restart  O start  B fetch voice  X stop  H shell  U update  Q quit\n" +
 			m.statusMessage,
 	)
 }
