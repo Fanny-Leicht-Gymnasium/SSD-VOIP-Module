@@ -1,0 +1,230 @@
+name: Build Docker and TUI and Push Docker Image
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  set-envs:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.vars.outputs.image }}
+      docker_repository: ${{ steps.vars.outputs.docker_repository }}
+      branch: ${{ steps.vars.outputs.branch }}
+      build_version: ${{ steps.vars.outputs.build_version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set build variables
+        id: vars
+        shell: bash
+        run: |
+          OWNER_REPO="${GITHUB_REPOSITORY,,}"
+          OWNER="${OWNER_REPO%%/*}"
+          REPO="${OWNER_REPO##*/}"
+          REPO="${REPO//_/-}"
+          IMAGE="ghcr.io/${OWNER}/${REPO}"
+
+          if [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            BUILD_VERSION="${GITHUB_SHA}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            BRANCH="release"
+            BUILD_VERSION="${VERSION}"
+          else
+            BRANCH="unknown"
+            BUILD_VERSION="${GITHUB_SHA}"
+          fi
+
+          BRANCH="${BRANCH,,}"
+          BRANCH="${BRANCH//\//-}"
+
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "BRANCH=${BRANCH}" >> "$GITHUB_ENV"
+          echo "BUILD_BRANCH=${BUILD_BRANCH}" >> "$GITHUB_ENV"
+          echo "BUILD_VERSION=${BUILD_VERSION}" >> "$GITHUB_ENV"
+
+          echo "image=${IMAGE}:${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "docker_repository=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "build_version=${BUILD_VERSION}" >> "$GITHUB_OUTPUT"
+
+
+          echo "Image:          ${IMAGE}:${BRANCH}"
+          echo "Branch:         ${BRANCH}"
+          echo "Version file:   ${BUILD_VERSION}"
+
+
+  build-bot:
+    runs-on: ubuntu-latest
+    needs: [set-envs]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        run: |
+          cd bot
+          docker build \
+            --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
+            -t "${{ needs.set-envs.outputs.image }}" \
+            .
+
+      - name: Save docker image
+        run: |
+          docker save ${{ needs.set-envs.outputs.image }} -o image.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+
+  promote-stable:
+    runs-on: ubuntu-latest
+    needs: [build-bot, set-envs]
+    if: startsWith(github.ref, 'refs/heads/')
+    permissions:
+      packages: write
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load docker image
+        run: |
+          docker load -i image.tar
+
+      - name: Login GHCR
+        uses: docker/login-action@v2 
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push branch + stable
+        run: |
+          IMAGE=${{ needs.set-envs.outputs.image }}
+          BRANCH=${{ needs.set-envs.outputs.branch }}
+
+          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:${BRANCH}
+
+          docker push ${IMAGE}:${BRANCH}
+
+
+
+  build-tui:
+    runs-on: ubuntu-latest
+    needs: [set-envs]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build TUI
+        working-directory: tui
+        shell: bash
+        run: |
+          OWNER_REPO="${GITHUB_REPOSITORY,,}"
+          OWNER="${OWNER_REPO%%/*}"
+          REPO="${OWNER_REPO##*/}"
+          REPO="${REPO//_/-}"
+
+          GIT_REPOSITORY="https://github.com/${OWNER}/${REPO}"
+          BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}"
+          BUILD_BRANCH="${{ needs.set-envs.outputs.branch }}"
+
+          echo "Repository:    ${GIT_REPOSITORY}"
+          echo "Branch:        ${BUILD_BRANCH}"
+          echo "Build version: ${BUILD_VERSION}"
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build \
+            -ldflags="-X main.version=${BUILD_VERSION} \
+                      -X main.repository=${GIT_REPOSITORY} \
+                      -X main.branch=${BUILD_BRANCH}" \
+            -o ssd-voip-tui \
+            .
+
+      - name: Upload TUI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssd-voip-tui
+          path: tui/ssd-voip-tui
+
+
+
+
+  full-release:
+    runs-on: ubuntu-latest
+    needs: [set-envs, build-bot, build-tui]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Set version env
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION#v}"
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "MAJOR=$MAJOR" >> $GITHUB_ENV
+          echo "MINOR=$MINOR" >> $GITHUB_ENV
+
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Download TUI
+        uses: actions/download-artifact@v4
+        with:
+          name: ssd-voip-tui
+          path: tui
+
+      - name: Load docker image
+        run: |
+          docker load -i image.tar
+
+      - name: Login GHCR
+        uses: docker/login-action@v2 
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag & push release
+        run: |
+          IMAGE=${{ needs.set-envs.outputs.docker_repository }}
+          BRANCH=${{ needs.set-envs.outputs.branch }}
+
+          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:${VERSION}
+          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:v${MAJOR}
+          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:v${MAJOR}.${MINOR}
+          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:latest
+
+          docker push ${IMAGE}:${VERSION}
+          docker push ${IMAGE}:v${MAJOR}
+          docker push ${IMAGE}:v${MAJOR}.${MINOR}
+          docker push ${IMAGE}:latest
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "${VERSION}" \
+            --generate-notes
+            tui/ssd-voip-tui
+
