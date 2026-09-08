@@ -213,3 +213,92 @@ func streamReader(
 		}
 	}
 }
+func getRunningComposeContainers() ([]string, error) {
+	cmd := exec.Command(
+		"docker",
+		"compose",
+		"ps",
+		"--services",
+		"--filter",
+		"status=running",
+	)
+	cmd.Dir = projectDir()
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get running compose services: %w: %s",
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+
+	var services []string
+
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		service := strings.TrimSpace(line)
+
+		if service != "" {
+			services = append(services, service)
+		}
+	}
+
+	return services, nil
+}
+
+func imageUpdateAvailable(service string) (bool, error) {
+	cmd := exec.Command(
+		"docker",
+		"compose",
+		"pull",
+		service,
+	)
+	cmd.Dir = projectDir()
+
+	output, err := cmd.CombinedOutput()
+	outputText := string(output)
+
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to pull image for %s: %w: %s",
+			service,
+			err,
+			strings.TrimSpace(outputText),
+		)
+	}
+
+	lowerOutput := strings.ToLower(outputText)
+
+	return strings.Contains(lowerOutput, "downloaded newer image") ||
+		strings.Contains(lowerOutput, "pulled") ||
+		strings.Contains(lowerOutput, "pull complete"), nil
+}
+
+func pullImage(service string) error {
+	// The image has already been pulled by imageUpdateAvailable.
+	return nil
+}
+
+func recreateContainer(service string) error {
+	cmd := exec.Command(
+		"docker",
+		"compose",
+		"up",
+		"-d",
+		"--no-deps",
+		service,
+	)
+	cmd.Dir = projectDir()
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"failed to recreate %s: %w: %s",
+			service,
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+
+	return nil
+}

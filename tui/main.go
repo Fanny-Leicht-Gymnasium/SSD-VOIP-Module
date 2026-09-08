@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -42,6 +43,10 @@ func main() {
 	if !skipCompose {
 		if err := installDockerCompose("."); err != nil {
 			fmt.Println("Failed to install docker-compose.yml:", err)
+			os.Exit(1)
+		}
+		if err := updateRunningContainers(); err != nil {
+			fmt.Println("Failed to update running containers:", err)
 			os.Exit(1)
 		}
 	}
@@ -100,4 +105,58 @@ func checkDockerDependencies() error {
 	fmt.Println()
 	return fmt.Errorf("docker compose is required")
 
+}
+func updateRunningContainers() error {
+	services, err := getRunningComposeContainers()
+	if err != nil {
+		return err
+	}
+
+	for _, service := range services {
+		fmt.Printf("Checking running container: %s\n", service)
+
+		cmd := exec.Command(
+			"docker",
+			"compose",
+			"pull",
+			service,
+		)
+		cmd.Dir = projectDir()
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf(
+				"failed to pull %s: %w: %s",
+				service,
+				err,
+				strings.TrimSpace(string(output)),
+			)
+		}
+
+		fmt.Print(string(output))
+
+		cmd = exec.Command(
+			"docker",
+			"compose",
+			"up",
+			"-d",
+			"--no-deps",
+			service,
+		)
+		cmd.Dir = projectDir()
+
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf(
+				"failed to update %s: %w: %s",
+				service,
+				err,
+				strings.TrimSpace(string(output)),
+			)
+		}
+
+		fmt.Print(string(output))
+	}
+
+	return nil
 }
