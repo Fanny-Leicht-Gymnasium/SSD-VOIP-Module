@@ -88,7 +88,7 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
             --build-arg PIPER_MODELS="none" \
-            -t "${{ needs.set-envs.outputs.image }}-${{ matrix.name }}" \
+            -t "${{ needs.set-envs.outputs.docker_repository }}:build-${{ matrix.name }}" \
             .
       - name: Save Docker image
         run: |
@@ -140,24 +140,20 @@ jobs:
       - name: Push architecture images
         shell: bash
         run: |
-          IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
-          BRANCH="${{ needs.set-envs.outputs.branch }}"
-
-          docker push "${IMAGE}:build-amd64"
-          docker push "${IMAGE}:build-arm64"
+          docker tag "${{ needs.set-envs.outputs.docker_repository }}:build-amd64" "${{ needs.set-envs.outputs.image }}-amd64"
+          docker tag "${{ needs.set-envs.outputs.docker_repository }}:build-arm64" "${{ needs.set-envs.outputs.image }}-arm64"
+          docker push "${{ needs.set-envs.outputs.image }}-amd64"
+          docker push "${{ needs.set-envs.outputs.image }}-arm64"
 
       - name: Create multi-arch image
         shell: bash
         run: |
-          IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
-          BRANCH="${{ needs.set-envs.outputs.branch }}"
-
           docker buildx create --use
 
           docker buildx imagetools create \
-            --tag "${IMAGE}:${BRANCH}" \
-            "${IMAGE}:build-amd64" \
-            "${IMAGE}:build-arm64"
+            --tag "${{ needs.set-envs.outputs.image }}" \
+            "${{ needs.set-envs.outputs.image }}-amd64" \
+            "${{ needs.set-envs.outputs.image }}-arm64"
 
 
   build-tui:
