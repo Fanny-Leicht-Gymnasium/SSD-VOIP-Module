@@ -33,22 +33,22 @@ var fields = []field{
 		Key: "CALL_ENDPOINT", Label: "PJSIP endpoint", DefaultValue: "fritzbox-endpoint", Page: PageAsterisk,
 	},
 	{
-		Key: "SIP_USERNAME", Label: "SIP trunk username", DefaultValue: "saniTest", Page: PageAsterisk,
+		Key: "SIP_USERNAME", Label: "SIP trunk username", DefaultValue: "SIPusername", Page: PageAsterisk,
 	},
 	{
-		Key: "SIP_PASSWORD", Label: "SIP trunk password", DefaultValue: "Testsani", Secret: true, Page: PageAsterisk,
+		Key: "SIP_PASSWORD", Label: "SIP trunk password", DefaultValue: "SIPpassword", Secret: true, Page: PageAsterisk,
 	},
 	{
 		Key: "SIP_DOMAIN", Label: "SIP trunk domain/host", DefaultValue: "fritz.box", Page: PageAsterisk,
 	},
 	{
-		Key: "TARGET_NUMBER", Label: "Default target number", DefaultValue: "**621", Page: PageGeneral,
+		Key: "TARGET_NUMBER", Label: "Default target number", DefaultValue: "**9", Page: PageGeneral,
 	},
 	{
 		Key: "MODULE_WS_URL", Label: "Module WebSocket URL", DefaultValue: "ws://localhost:8080/system/moduleWS", Page: PageGeneral,
 	},
 	{
-		Key: "MODULE_WS_KEY", Label: "Module WebSocket key", DefaultValue: "gsm-secret-key", Secret: true, Page: PageGeneral,
+		Key: "MODULE_WS_KEY", Label: "Module WebSocket key", DefaultValue: "ws-secret-key", Secret: true, Page: PageGeneral,
 	},
 	{
 		Key: "PIPER_MODELS", Label: "Piper voice model", DefaultValue: "de_DE-thorsten-medium", Page: PageGeneral,

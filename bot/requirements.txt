@@ -1,4 +1,4 @@
 websocket-client
 requests
-pyttsx3
 websockets
+piper-tts

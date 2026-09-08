@@ -72,6 +72,7 @@ jobs:
           cd bot
           docker build \
             --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
+            --build-arg PIPER_MODELS="none" \
             -t "${{ needs.set-envs.outputs.image }}" \
             .
 
@@ -160,7 +161,8 @@ jobs:
 
           CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
           go build \
-            -ldflags="-X main.version=${BUILD_VERSION} \
+            -ldflags="-s -w \
+                      -X main.version=${BUILD_VERSION} \
                       -X main.repository=${GIT_REPOSITORY} \
                       -X main.branch=${BUILD_BRANCH}" \
             -o "ssd-voip-tui-${{ matrix.name }}" \
