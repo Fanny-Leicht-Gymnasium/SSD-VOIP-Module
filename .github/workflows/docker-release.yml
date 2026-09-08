@@ -124,6 +124,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [set-envs]
 
+    strategy:
+      matrix:
+        include:
+          - name: linux-amd64
+            goarch: amd64
+          - name: linux-arm64
+            goarch: arm64
+
     steps:
       - uses: actions/checkout@v4
 
@@ -148,22 +156,21 @@ jobs:
           echo "Repository:    ${GIT_REPOSITORY}"
           echo "Branch:        ${BUILD_BRANCH}"
           echo "Build version: ${BUILD_VERSION}"
+          echo "Architecture:  ${{ matrix.goarch }}"
 
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
           go build \
             -ldflags="-X main.version=${BUILD_VERSION} \
                       -X main.repository=${GIT_REPOSITORY} \
                       -X main.branch=${BUILD_BRANCH}" \
-            -o ssd-voip-tui \
+            -o "ssd-voip-tui-${{ matrix.name }}" \
             .
 
       - name: Upload TUI
         uses: actions/upload-artifact@v4
         with:
-          name: ssd-voip-tui
-          path: tui/ssd-voip-tui
-
-
+          name: ssd-voip-tui-${{ matrix.name }}
+          path: tui/ssd-voip-tui-${{ matrix.name }}
 
 
   full-release:
@@ -173,58 +180,82 @@ jobs:
     permissions:
       contents: write
       packages: write
+
     steps:
       - name: Set version env
+        shell: bash
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION="${GITHUB_REF#refs/tags/}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION#v}"
 
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "MAJOR=$MAJOR" >> $GITHUB_ENV
-          echo "MINOR=$MINOR" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "MAJOR=${MAJOR}" >> "$GITHUB_ENV"
+          echo "MINOR=${MINOR}" >> "$GITHUB_ENV"
 
-      - name: Download image
+      - name: Download Docker image
         uses: actions/download-artifact@v4
         with:
           name: docker-image
 
-      - name: Download TUI
+      - name: Download TUI amd64
         uses: actions/download-artifact@v4
         with:
-          name: ssd-voip-tui
+          name: ssd-voip-tui-linux-amd64
           path: tui
 
-      - name: Load docker image
+      - name: Download TUI arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: ssd-voip-tui-linux-arm64
+          path: tui
+
+      - name: Load Docker image
         run: |
           docker load -i image.tar
 
       - name: Login GHCR
-        uses: docker/login-action@v2 
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag & push release
+      - name: Tag and push release
+        shell: bash
         run: |
-          IMAGE=${{ needs.set-envs.outputs.docker_repository }}
-          BRANCH=${{ needs.set-envs.outputs.branch }}
+          IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
+          BRANCH="${{ needs.set-envs.outputs.branch }}"
 
-          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:${VERSION}
-          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:v${MAJOR}
-          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:v${MAJOR}.${MINOR}
-          docker tag ${IMAGE}:${BRANCH} ${IMAGE}:latest
+          docker tag "${IMAGE}:${BRANCH}" "${IMAGE}:${VERSION}"
+          docker tag "${IMAGE}:${BRANCH}" "${IMAGE}:v${MAJOR}"
+          docker tag "${IMAGE}:${BRANCH}" "${IMAGE}:v${MAJOR}.${MINOR}"
+          docker tag "${IMAGE}:${BRANCH}" "${IMAGE}:latest"
 
-          docker push ${IMAGE}:${VERSION}
-          docker push ${IMAGE}:v${MAJOR}
-          docker push ${IMAGE}:v${MAJOR}.${MINOR}
-          docker push ${IMAGE}:latest
+          docker push "${IMAGE}:${VERSION}"
+          docker push "${IMAGE}:v${MAJOR}"
+          docker push "${IMAGE}:v${MAJOR}.${MINOR}"
+          docker push "${IMAGE}:latest"
+
+      - name: Generate checksums
+        working-directory: tui
+        shell: bash
+        run: |
+          sha256sum \
+            ssd-voip-tui-linux-amd64 \
+            ssd-voip-tui-linux-arm64 \
+            > checksums.txt
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: tui
         run: |
           gh release create "${VERSION}" \
             --title "${VERSION}" \
-            --generate-notes
-            tui/ssd-voip-tui
+            --generate-notes \
+            ssd-voip-tui-linux-amd64 \
+            ssd-voip-tui-linux-arm64 \
+            checksums.txt
+
+
 

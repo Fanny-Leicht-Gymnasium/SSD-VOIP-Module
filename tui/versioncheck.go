@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -62,8 +63,10 @@ func checkForUpdate() tea.Cmd {
 			}
 		}
 
+		assetName := getTUIAssetName()
+
 		for _, asset := range release.Assets {
-			if asset.Name == "ssd-voip-tui" {
+			if asset.Name == assetName {
 				return versionCheckMsg{
 					LatestVersion: latest,
 					DownloadURL:   asset.BrowserURL,
@@ -74,11 +77,20 @@ func checkForUpdate() tea.Cmd {
 		return versionCheckMsg{
 			LatestVersion: latest,
 			Err: fmt.Errorf(
-				"release %s does not contain ssd-voip-tui",
+				"release %s does not contain %s",
 				latest,
+				assetName,
 			),
 		}
 	}
+}
+
+func getTUIAssetName() string {
+	return fmt.Sprintf(
+		"ssd-voip-tui-%s-%s",
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
 }
 
 func fetchLatestRelease() (*GitHubRelease, error) {
@@ -88,7 +100,10 @@ func fetchLatestRelease() (*GitHubRelease, error) {
 	parts := strings.Split(repo, "/")
 
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid GitHub repository: %s", repository)
+		return nil, fmt.Errorf(
+			"invalid GitHub repository: %s",
+			repository,
+		)
 	}
 
 	url := "https://api.github.com/repos/" + repo + "/releases/latest"
@@ -241,7 +256,10 @@ func updateTUI(downloadURL string) tea.Cmd {
 
 		if resp.StatusCode != http.StatusOK {
 			return updateResultMsg{
-				Err: fmt.Errorf("download failed: %s", resp.Status),
+				Err: fmt.Errorf(
+					"download failed: %s",
+					resp.Status,
+				),
 			}
 		}
 
@@ -263,7 +281,10 @@ func updateTUI(downloadURL string) tea.Cmd {
 
 		if err := os.Rename(executable, backupPath); err != nil {
 			return updateResultMsg{
-				Err: fmt.Errorf("cannot replace executable: %w", err),
+				Err: fmt.Errorf(
+					"cannot replace executable: %w",
+					err,
+				),
 			}
 		}
 
@@ -271,7 +292,10 @@ func updateTUI(downloadURL string) tea.Cmd {
 			_ = os.Rename(backupPath, executable)
 
 			return updateResultMsg{
-				Err: fmt.Errorf("cannot install update: %w", err),
+				Err: fmt.Errorf(
+					"cannot install update: %w",
+					err,
+				),
 			}
 		}
 
