@@ -13,35 +13,45 @@ type field struct {
 	Value        string
 	DefaultValue string
 	Secret       bool
+	Page         Page
 }
 
 var fields = []field{
 	{
-		Key: "ARI_URL", Label: "ARI HTTP URL", DefaultValue: "http://127.0.0.1:8088",
+		Key: "ARI_URL", Label: "ARI HTTP URL", DefaultValue: "http://127.0.0.1:8088", Page: PageAsterisk,
 	},
 	{
-		Key: "ARI_USER", Label: "ARI user", DefaultValue: "bot",
+		Key: "ARI_USER", Label: "ARI user", DefaultValue: "bot", Page: PageAsterisk,
 	},
 	{
-		Key: "ARI_PASSWORD", Label: "ARI password", DefaultValue: "secret", Secret: true,
+		Key: "ARI_PASSWORD", Label: "ARI password", DefaultValue: "secret", Secret: true, Page: PageAsterisk,
 	},
 	{
-		Key: "APP_NAME", Label: "ARI app name", DefaultValue: "ivrbot",
+		Key: "APP_NAME", Label: "ARI app name", DefaultValue: "ivrbot", Page: PageAsterisk,
 	},
 	{
-		Key: "TARGET_NUMBER", Label: "Default target number", DefaultValue: "**621",
+		Key: "CALL_ENDPOINT", Label: "PJSIP endpoint", DefaultValue: "fritzbox-endpoint", Page: PageAsterisk,
 	},
 	{
-		Key: "CALL_ENDPOINT", Label: "PJSIP endpoint", DefaultValue: "fritzbox-endpoint",
+		Key: "SIP_USERNAME", Label: "SIP trunk username", DefaultValue: "saniTest", Page: PageAsterisk,
 	},
 	{
-		Key: "MODULE_WS_URL", Label: "Module WebSocket URL", DefaultValue: "ws://localhost:8080/system/moduleWS",
+		Key: "SIP_PASSWORD", Label: "SIP trunk password", DefaultValue: "Testsani", Secret: true, Page: PageAsterisk,
 	},
 	{
-		Key: "MODULE_WS_KEY", Label: "Module WebSocket key", DefaultValue: "gsm-secret-key", Secret: true,
+		Key: "SIP_DOMAIN", Label: "SIP trunk domain/host", DefaultValue: "fritz.box", Page: PageAsterisk,
 	},
 	{
-		Key: "PIPER_MODELS", Label: "Piper models", DefaultValue: "de_DE-thorsten-medium",
+		Key: "TARGET_NUMBER", Label: "Default target number", DefaultValue: "**621", Page: PageGeneral,
+	},
+	{
+		Key: "MODULE_WS_URL", Label: "Module WebSocket URL", DefaultValue: "ws://localhost:8080/system/moduleWS", Page: PageGeneral,
+	},
+	{
+		Key: "MODULE_WS_KEY", Label: "Module WebSocket key", DefaultValue: "gsm-secret-key", Secret: true, Page: PageGeneral,
+	},
+	{
+		Key: "PIPER_MODELS", Label: "Piper voice model", DefaultValue: "de_DE-thorsten-medium", Page: PageGeneral,
 	},
 }
 
@@ -172,7 +182,7 @@ func displayValue(value string, secret bool) string {
 	}
 
 	return strings.Repeat(
-		"•",
+		"\u2022",
 		min(len([]rune(value)), 24),
 	)
 }

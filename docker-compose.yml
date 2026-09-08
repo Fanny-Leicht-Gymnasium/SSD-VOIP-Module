@@ -28,6 +28,11 @@ services:
       CALL_ENDPOINT: ${CALL_ENDPOINT:-fritzbox-endpoint}
       MODULE_WS_URL: ${MODULE_WS_URL:-ws://localhost:8080/system/moduleWS}
       MODULE_WS_KEY: ${MODULE_WS_KEY:-gsm-secret-key}
+      PIPER_MODELS: ${PIPER_MODELS:-de_DE-thorsten-medium}
 
     volumes:
       - ./sounds:/app/sounds
+      # Voice models live on the host, outside the image, so switching
+      # PIPER_MODELS only needs `docker compose up -d bot` (the TUI's
+      # "B" key does this), never a rebuild.
+      - ./piper-voices:/app/piper-voices

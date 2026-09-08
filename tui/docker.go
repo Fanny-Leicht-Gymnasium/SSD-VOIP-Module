@@ -33,6 +33,7 @@ func (service LogService) String() string {
 func runDockerCommand(status string, args ...string) tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command("docker", args...)
+		cmd.Dir = projectDir()
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -61,6 +62,7 @@ func startDockerLogs(program *tea.Program, service string, session uint64) tea.C
 		}
 
 		cmd := exec.CommandContext(ctx, "docker", args...)
+		cmd.Dir = projectDir()
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {

@@ -7,6 +7,34 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 
+def _build_voice_map() -> dict[str, str]:
+    """
+    Build a {language_code: model_filename} map from the PIPER_MODELS
+    env var (baked in at image build time, also passed through at
+    runtime). Supports a comma-separated list of voice names, e.g.
+    "de_DE-thorsten-medium,en_US-lessac-medium" for multi-language setups.
+
+    The language code is derived from the model name's prefix, following
+    Piper's "<lang>_<REGION>-<speaker>-<quality>" naming convention.
+    """
+
+    models = os.environ.get("PIPER_MODELS", "de_DE-thorsten-medium")
+
+    voice_map: dict[str, str] = {}
+
+    for name in (m.strip() for m in models.split(",")):
+        if not name:
+            continue
+
+        lang = name.split("_", 1)[0]
+        voice_map[lang] = f"{name}.onnx"
+
+    return voice_map
+
+
+VOICE_MAP = _build_voice_map()
+
+
 async def generate_wav(
     text: str,
     output_name: str,
@@ -27,22 +55,26 @@ async def generate_wav(
     output_path = os.path.join(output_dir, f"{output_name}.wav")
     os.makedirs(output_dir, exist_ok=True)
 
-    voice_map = {
-        "de": "de_DE-thorsten-medium.onnx",
-        # Add more voices here if needed.
-        # "en": "en_US-lessac-medium.onnx",
-    }
-
-    voice_file = voice_map.get(lang)
+    voice_file = VOICE_MAP.get(lang)
 
     if not voice_file:
-        raise ValueError(f"Unsupported language: {lang}")
+        raise ValueError(
+            f"Unsupported language: {lang} "
+            f"(configured voices: {', '.join(VOICE_MAP) or 'none'})"
+        )
 
     model_path = os.path.join(voice_dir, voice_file)
+    config_path = f"{model_path}.json"
 
     if not os.path.isfile(model_path):
         raise FileNotFoundError(
             f"Piper voice model not found: {model_path}"
+        )
+
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(
+            f"Piper voice config not found: {config_path} "
+            "(each Piper model needs a matching .onnx.json file)"
         )
 
     with tempfile.NamedTemporaryFile(
