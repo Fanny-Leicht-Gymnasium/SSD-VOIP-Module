@@ -54,6 +54,10 @@ type Model struct {
 	statusMessage, asteriskStatus, botStatus string
 	program                                  *tea.Program
 
+	// Log display state.
+	logHorizontalOffset int
+	logsFullscreen      bool
+
 	// Piper voice select-with-autocomplete state, active while editing
 	// the PIPER_MODELS field.
 	selecting      bool
@@ -163,14 +167,40 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			m.focus = FocusConfig
 		}
 	case "left":
+		if m.focus == FocusLogs {
+			m.scrollLogsHorizontal(-1)
+			return nil
+		}
+
 		if m.focus == FocusConfig && m.page != PageGeneral {
 			m.page = PageGeneral
 			m.cursor = 0
 		}
+
 	case "right":
+		if m.focus == FocusLogs {
+			m.scrollLogsHorizontal(1)
+			return nil
+		}
+
 		if m.focus == FocusConfig && m.page != PageAsterisk {
 			m.page = PageAsterisk
 			m.cursor = 0
+		}
+	case "ctrl+left":
+		if m.focus == FocusLogs {
+			m.scrollLogsHorizontal(-20)
+		}
+
+	case "ctrl+right":
+		if m.focus == FocusLogs {
+			m.scrollLogsHorizontal(20)
+		}
+
+	case "f":
+		if m.focus == FocusLogs {
+			m.logsFullscreen = !m.logsFullscreen
+			m.resetLogHorizontalScroll()
 		}
 	case "up", "k":
 		if m.focus == FocusConfig {
@@ -316,12 +346,97 @@ func (m *Model) addLog(line string) {
 	if line == "" {
 		return
 	}
+
 	m.logs = append(m.logs, line)
+
 	if len(m.logs) > m.maxLogs {
 		m.logs = m.logs[len(m.logs)-m.maxLogs:]
 	}
-	m.viewport.SetContent(strings.Join(m.logs, "\n"))
+
+	m.viewport.SetContent(m.visibleLogContent())
 	m.viewport.GotoBottom()
+}
+func (m *Model) scrollLogsHorizontal(delta int) {
+	m.logHorizontalOffset += delta
+
+	if m.logHorizontalOffset < 0 {
+		m.logHorizontalOffset = 0
+	}
+
+	// Do not allow the offset to move beyond the longest log line.
+	maxWidth := 0
+	for _, line := range m.logs {
+		if w := lipgloss.Width(line); w > maxWidth {
+			maxWidth = w
+		}
+	}
+
+	visibleWidth := max(1, m.viewport.Width)
+
+	maxOffset := max(0, maxWidth-visibleWidth)
+	if m.logHorizontalOffset > maxOffset {
+		m.logHorizontalOffset = maxOffset
+	}
+}
+
+func (m *Model) resetLogHorizontalScroll() {
+	m.logHorizontalOffset = 0
+}
+
+func (m *Model) visibleLogContent() string {
+	if len(m.logs) == 0 {
+		return "Docker logs will appear here..."
+	}
+
+	visibleWidth := max(1, m.viewport.Width)
+
+	lines := make([]string, 0, len(m.logs))
+
+	for _, line := range m.logs {
+		lines = append(lines, clipLogLine(line, m.logHorizontalOffset, visibleWidth))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// clipLogLine returns the visible horizontal section of a log line.
+func clipLogLine(line string, offset, width int) string {
+	if offset <= 0 {
+		return truncateLogLine(line, width)
+	}
+
+	runes := []rune(line)
+
+	if offset >= len(runes) {
+		return ""
+	}
+
+	end := minInt(len(runes), offset+width)
+	return string(runes[offset:end])
+}
+
+func truncateLogLine(line string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	runes := []rune(line)
+
+	if len(runes) <= width {
+		return line
+	}
+
+	return string(runes[:width])
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func (m *Model) refreshLogViewport() {
+	m.viewport.SetContent(m.visibleLogContent())
 }
 func displayLogService(s LogService) string {
 	switch s {
@@ -339,6 +454,11 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
+	// Fullscreen log mode hides the configuration panel and footer.
+	if m.logsFullscreen {
+		return m.renderLogsFullscreen()
+	}
+
 	header := m.renderHeader()
 	footer := m.renderFooter()
 	config := m.renderConfig()
@@ -346,6 +466,7 @@ func (m *Model) View() string {
 	overhead := lipgloss.Height(header) + lipgloss.Height(footer)
 
 	var body string
+
 	if m.width >= 110 {
 		logsHeight := max(5, m.height-overhead)
 		logs := m.renderLogsSized(logPanelWidth(m.width), logsHeight)
@@ -357,6 +478,28 @@ func (m *Model) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+}
+func (m *Model) renderLogsFullscreen() string {
+	width := max(10, m.width)
+	height := max(1, m.height-2)
+
+	m.viewport.Width = max(1, width-6)
+	m.viewport.Height = max(1, height-2)
+
+	m.refreshLogViewport()
+
+	title := "Logs [" + displayLogService(m.logService) + "]"
+
+	if m.logHorizontalOffset > 0 {
+		title += fmt.Sprintf("  ← offset %d", m.logHorizontalOffset)
+	}
+
+	content := title + "\n\n" + m.viewport.View()
+
+	return panelFocusedStyle.
+		Width(width).
+		Height(height).
+		Render(content)
 }
 func (m *Model) renderHeader() string {
 	return titleStyle.Render("SSD VOIP TUI") + "  " + statusStyle.Render(fmt.Sprintf("Asterisk: %s   Bot: %s", formatServiceStatus(m.asteriskStatus), formatServiceStatus(m.botStatus)))
@@ -433,6 +576,7 @@ func (m *Model) renderConfig() string {
 func (m *Model) renderLogsSized(width, height int) string {
 	innerHeight := height - 4
 	viewportHeight := innerHeight - 2
+
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
@@ -440,15 +584,30 @@ func (m *Model) renderLogsSized(width, height int) string {
 	m.viewport.Width = max(10, width-6)
 	m.viewport.Height = viewportHeight
 
+	m.refreshLogViewport()
+
 	style := panelStyle
+
 	if m.focus == FocusLogs {
 		style = panelFocusedStyle
 	}
 
-	return style.Width(width).Render("Logs [" + displayLogService(m.logService) + "]\n\n" + m.viewport.View())
+	title := "Logs [" + displayLogService(m.logService) + "]"
+
+	if m.logHorizontalOffset > 0 {
+		title += fmt.Sprintf("  ← offset %d", m.logHorizontalOffset)
+	}
+
+	return style.Width(width).Render(
+		title + "\n\n" + m.viewport.View(),
+	)
 }
 func (m *Model) renderFooter() string {
-	return helpStyle.Render("Up/Down navigate  Left/Right page  Enter edit  Tab focus  1/2/3 logs  S save  T ARI  R restart  O start  B fetch voice  X stop  H shell  Q quit\n" + m.statusMessage)
+	return helpStyle.Render(
+		"Up/Down navigate  Left/Right page/scroll  Enter edit  Tab focus  F fullscreen  " +
+			"1/2/3 logs  S save  T ARI  R restart  O start  B fetch voice  X stop  H shell  Q quit\n" +
+			m.statusMessage,
+	)
 }
 func panelWidth(n int) int {
 	if n < 110 {
