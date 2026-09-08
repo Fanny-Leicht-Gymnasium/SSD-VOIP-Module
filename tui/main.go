@@ -14,6 +14,10 @@ var (
 	branch     = "unknown"
 )
 
+func GetVersionInfo() (string, string, string) {
+	return version, branch, repository
+}
+
 func main() {
 	if err := checkDockerDependencies(); err != nil {
 		fmt.Println("Dependency check failed:", err)

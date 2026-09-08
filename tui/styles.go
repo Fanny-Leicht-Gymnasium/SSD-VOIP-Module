@@ -46,6 +46,15 @@ var (
 			Foreground(lipgloss.Color("203"))
 
 	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("37"))
+
+	statusStyleRunning = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("10"))
+
+	statusStyleNotRunning = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("9"))
+
+	versionStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("245"))
 
 	helpStyle = lipgloss.NewStyle().
@@ -97,22 +106,25 @@ func renderHeader(
 func formatServiceStatus(status string) string {
 	switch strings.ToLower(status) {
 	case "running":
-		return "● RUNNING"
+		return statusStyleRunning.Render("● RUNNING")
 
 	case "exited":
-		return "● EXITED"
+		return statusStyleNotRunning.Render("● EXITED")
 
 	case "created":
-		return "● CREATED"
+		return statusStyleNotRunning.Render("● CREATED")
 
 	case "paused":
-		return "● PAUSED"
+		return statusStyleNotRunning.Render("● PAUSED")
 
 	case "error":
-		return "● ERROR"
+		return statusStyleNotRunning.Render("● ERROR")
+
+	case "":
+		return statusStyleNotRunning.Render("● Unknown")
 
 	default:
-		return "● " + strings.ToUpper(status)
+		return statusStyleNotRunning.Render("● " + strings.ToUpper(status))
 	}
 }
 

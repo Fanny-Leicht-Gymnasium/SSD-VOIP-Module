@@ -502,7 +502,8 @@ func (m *Model) renderLogsFullscreen() string {
 		Render(content)
 }
 func (m *Model) renderHeader() string {
-	return titleStyle.Render("SSD VOIP TUI") + "  " + statusStyle.Render(fmt.Sprintf("Asterisk: %s   Bot: %s", formatServiceStatus(m.asteriskStatus), formatServiceStatus(m.botStatus)))
+	version, branch, repo := GetVersionInfo()
+	return titleStyle.Render("SSD VOIP TUI") + "  " + statusStyle.Render(fmt.Sprintf("Asterisk: %s", formatServiceStatus(m.asteriskStatus))) + statusStyle.Render(fmt.Sprintf("   Bot: %s", formatServiceStatus(m.botStatus))) + "  " + versionStyle.Render(fmt.Sprintf("Version: %s Branch: %s Repo: %s", version, branch, repo))
 }
 func (m *Model) renderPageTabs() string {
 	general := tabStyle.Render("General")
