@@ -305,7 +305,7 @@ func (m *Model) beginEdit() {
 	f := m.fields[visible[m.cursor]]
 	m.input.SetValue(f.Value)
 	m.input.EchoMode = textinput.EchoNormal
-	if f.Secret {
+	if f.Secret && !disableCensoring {
 		m.input.EchoMode = textinput.EchoPassword
 	}
 	m.input.Focus()

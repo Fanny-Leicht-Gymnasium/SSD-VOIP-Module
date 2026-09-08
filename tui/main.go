@@ -14,14 +14,36 @@ var (
 	branch     = "unknown"
 )
 
+var disableCensoring = false
+
 func GetVersionInfo() (string, string, string) {
 	return version, branch, repository
 }
 
 func main() {
-	if err := checkDockerDependencies(); err != nil {
-		fmt.Println("Dependency check failed:", err)
-		os.Exit(1)
+	skipDockerCheck := false
+	skipCompose := false
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--no-censor-tokens":
+			disableCensoring = true
+		case "--no-compose":
+			skipCompose = true
+		case "--no-docker-check":
+			skipDockerCheck = true
+		}
+	}
+	if !skipDockerCheck {
+		if err := checkDockerDependencies(); err != nil {
+			fmt.Println("Dependency check failed:", err)
+			os.Exit(1)
+		}
+	}
+	if !skipCompose {
+		if err := installDockerCompose("."); err != nil {
+			fmt.Println("Failed to install docker-compose.yml:", err)
+			os.Exit(1)
+		}
 	}
 
 	model := NewModel()
