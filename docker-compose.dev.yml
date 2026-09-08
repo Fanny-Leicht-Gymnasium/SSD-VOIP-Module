@@ -1,0 +1,38 @@
+services:
+  asterisk:
+    image: andrius/asterisk
+    container_name: asterisk
+    network_mode: host
+    volumes:
+      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk/ari.conf:/etc/asterisk/ari.conf
+      - ./asterisk/http.conf:/etc/asterisk/http.conf
+      - ./sounds:/var/lib/asterisk/sounds/
+
+  bot:
+    build:
+      context: ./bot
+      args:
+        PIPER_MODELS: ${PIPER_MODELS:-de_DE-thorsten-medium}
+    container_name: ivr-bot
+    network_mode: host
+    restart: unless-stopped
+
+    environment:
+      ARI_URL: ${ARI_URL:-http://127.0.0.1:8088}
+      ARI_USER: ${ARI_USER:-bot}
+      ARI_PASSWORD: ${ARI_PASSWORD:-secret}
+      APP_NAME: ${APP_NAME:-ivrbot}
+      TARGET_NUMBER: ${TARGET_NUMBER:-**9}
+      CALL_ENDPOINT: ${CALL_ENDPOINT:-fritzbox-endpoint}
+      MODULE_WS_URL: ${MODULE_WS_URL:-ws://localhost:8080/system/moduleWS}
+      MODULE_WS_KEY: ${MODULE_WS_KEY:-gsm-secret-key}
+      PIPER_MODELS: ${PIPER_MODELS:-de_DE-thorsten-medium}
+
+    volumes:
+      - ./sounds:/app/sounds
+      # Voice models live on the host, outside the image, so switching
+      # PIPER_MODELS only needs `docker compose up -d bot` (the TUI's
+      # "B" key does this), never a rebuild.
+      - ./piper-voices:/app/piper-voices

@@ -1,4 +1,6 @@
-sounds/auto-tts
+/sounds/auto-tts
 /asterisk
 __pycache__
 .venv
+/piper-voices/*
+.env
