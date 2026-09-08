@@ -88,8 +88,6 @@ func NewModel() *Model {
 			executable = ""
 		}
 	}
-	values := loadEnv(envPath())
-	saveEnv(envPath(), values)
 
 	m := &Model{
 		focus:          FocusConfig,

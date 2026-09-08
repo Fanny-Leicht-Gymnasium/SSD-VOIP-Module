@@ -45,6 +45,8 @@ func main() {
 			fmt.Println("Failed to install docker-compose.yml:", err)
 			os.Exit(1)
 		}
+		values := loadEnv(envPath())
+		saveEnv(envPath(), values)
 		if err := updateRunningContainers(); err != nil {
 			fmt.Println("Failed to update running containers:", err)
 			os.Exit(1)
