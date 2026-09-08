@@ -88,6 +88,7 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
             --build-arg PIPER_MODELS="none" \
+            --load \
             -t "${{ needs.set-envs.outputs.docker_repository }}:build-${{ matrix.name }}" \
             .
       - name: Save Docker image
