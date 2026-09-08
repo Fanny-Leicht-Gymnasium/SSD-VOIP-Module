@@ -111,7 +111,7 @@ jobs:
 
       - name: Push branch + stable
         run: |
-          IMAGE=${{ needs.set-envs.outputs.image }}
+          IMAGE=${{ needs.set-envs.outputs.docker_repository }}
           BRANCH=${{ needs.set-envs.outputs.branch }}
 
           docker tag ${IMAGE}:${BRANCH} ${IMAGE}:${BRANCH}
