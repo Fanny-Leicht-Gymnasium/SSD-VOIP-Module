@@ -128,28 +128,32 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push amd64 image
+      - name: Load Docker images
         run: |
-          docker buildx imagetools create \
-            --tag "${{ needs.set-envs.outputs.image }}-amd64" \
-            "oci-layout://$(pwd)/images/amd64"
+          docker load -i images/amd64/image-amd64.tar
+          docker load -i images/arm64/image-arm64.tar
 
-      - name: Push arm64 image
-        run: |
-          docker buildx imagetools create \
-            --tag "${{ needs.set-envs.outputs.image }}-arm64" \
-            "oci-layout://$(pwd)/images/arm64"
-
-      - name: Create multi-arch image
+      - name: Push architecture images
+        shell: bash
         run: |
           IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
           BRANCH="${{ needs.set-envs.outputs.branch }}"
 
+          docker push "${IMAGE}:build-amd64"
+          docker push "${IMAGE}:build-arm64"
+
+      - name: Create multi-arch image
+        shell: bash
+        run: |
+          IMAGE="${{ needs.set-envs.outputs.docker_repository }}"
+          BRANCH="${{ needs.set-envs.outputs.branch }}"
+
+          docker buildx create --use
+
           docker buildx imagetools create \
             --tag "${IMAGE}:${BRANCH}" \
-            "${IMAGE}:${BRANCH}-amd64" \
-            "${IMAGE}:${BRANCH}-arm64"
+            "${IMAGE}:build-amd64" \
+            "${IMAGE}:build-arm64"
 
 
   build-tui:
