@@ -78,7 +78,7 @@ jobs:
           cd bot
 
           docker buildx build \
-            --platform linux/amd64,linux/arm64,linux/arm/v7 \
+            --platform linux/amd64,linux/arm64 \
             --build-arg BUILD_VERSION="${{ needs.set-envs.outputs.build_version }}" \
             --build-arg PIPER_MODELS="none" \
             -t "${{ needs.set-envs.outputs.image }}" \
@@ -135,10 +135,6 @@ jobs:
             goarch: amd64
           - name: linux-arm64
             goarch: arm64
-
-          - name: linux-armv7
-            goarch: arm
-            goarm: 7
 
     steps:
       - uses: actions/checkout@v4
@@ -222,11 +218,6 @@ jobs:
           name: ssd-voip-tui-linux-arm64
           path: tui
 
-      - name: Download TUI armv7
-        uses: actions/download-artifact@v4
-        with:
-          name: ssd-voip-tui-linux-armv7
-          path: tui
 
       - name: Load Docker image
         run: |
@@ -262,7 +253,6 @@ jobs:
           sha256sum \
             ssd-voip-tui-linux-amd64 \
             ssd-voip-tui-linux-arm64 \
-            ssd-voip-tui-linux-armv7 \
             > checksums.txt
 
       - name: Create GitHub Release
@@ -275,7 +265,6 @@ jobs:
             --generate-notes \
             ssd-voip-tui-linux-amd64 \
             ssd-voip-tui-linux-arm64 \
-            ssd-voip-tui-linux-armv7 \
             checksums.txt
 
 
