@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -301,4 +303,45 @@ func recreateContainer(service string) error {
 	}
 
 	return nil
+}
+func acquireUpdateLock() (*os.File, error) {
+	lockPath := filepath.Join(projectDir(), ".ssd-voip-tui-update.lock")
+
+	lockFile, err := os.OpenFile(
+		lockPath,
+		os.O_CREATE|os.O_RDWR,
+		0600,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open update lock: %w", err)
+	}
+
+	err = syscall.Flock(
+		int(lockFile.Fd()),
+		syscall.LOCK_EX|syscall.LOCK_NB,
+	)
+	if err != nil {
+		lockFile.Close()
+
+		if err == syscall.EWOULDBLOCK {
+			return nil, fmt.Errorf("another TUI instance is already performing an update")
+		}
+
+		return nil, fmt.Errorf("failed to acquire update lock: %w", err)
+	}
+
+	return lockFile, nil
+}
+
+func releaseUpdateLock(lockFile *os.File) {
+	if lockFile == nil {
+		return
+	}
+
+	_ = syscall.Flock(
+		int(lockFile.Fd()),
+		syscall.LOCK_UN,
+	)
+
+	_ = lockFile.Close()
 }

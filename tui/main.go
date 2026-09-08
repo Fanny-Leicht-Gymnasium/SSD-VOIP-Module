@@ -49,6 +49,7 @@ func main() {
 			fmt.Println("Failed to update running containers:", err)
 			os.Exit(1)
 		}
+
 	}
 
 	model := NewModel()
@@ -107,6 +108,13 @@ func checkDockerDependencies() error {
 
 }
 func updateRunningContainers() error {
+	lockFile, err := acquireUpdateLock()
+	if err != nil {
+		// Another TUI instance is already handling the update.
+		fmt.Println("Docker update skipped:", err)
+		return nil
+	}
+	defer releaseUpdateLock(lockFile)
 	services, err := getRunningComposeContainers()
 	if err != nil {
 		return err
