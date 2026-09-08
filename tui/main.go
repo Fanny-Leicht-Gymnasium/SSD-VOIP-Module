@@ -55,6 +55,8 @@ func main() {
 
 	model.program = program
 
+	setupRestartSignal(program)
+
 	if _, err := program.Run(); err != nil {
 		fmt.Println("TUI failed:", err)
 		os.Exit(1)

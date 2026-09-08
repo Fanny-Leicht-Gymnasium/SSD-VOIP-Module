@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,9 +40,11 @@ type dockerCommandMsg struct {
 type dockerStatusMsg struct{ Asterisk, Bot string }
 type statusTickMsg struct{}
 type updateCheckTickMsg struct{}
+type restartMsg struct{}
 
 type Model struct {
 	width, height                            int
+	executablePath                           string
 	focus                                    Focus
 	page                                     Page
 	fields                                   []field
@@ -75,7 +79,25 @@ func NewModel() *Model {
 	input := textinput.New()
 	input.CharLimit = 500
 	input.Width = 50
-	m := &Model{focus: FocusConfig, fields: defaultFields(), maxLogs: 5000, input: input}
+	executable, err := os.Executable()
+	if err != nil {
+		executable = ""
+	} else {
+		executable, err = filepath.Abs(executable)
+		if err != nil {
+			executable = ""
+		}
+	}
+	values := loadEnv(envPath())
+	saveEnv(envPath(), values)
+
+	m := &Model{
+		focus:          FocusConfig,
+		fields:         defaultFields(),
+		maxLogs:        5000,
+		input:          input,
+		executablePath: executable,
+	}
 	m.viewport = viewport.New(80, 20)
 	m.viewport.SetContent("Docker logs will appear here...")
 	return m
@@ -131,15 +153,34 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = "No update available."
 		}
+	case restartMsg:
+		if m.executablePath == "" {
+			m.statusMessage = "Restart failed: executable path is empty"
+			return m, nil
+		}
+
+		if err := restartTUI(m.executablePath); err != nil {
+			m.statusMessage = fmt.Sprintf(
+				"Restart failed: %v",
+				err,
+			)
+			return m, nil
+		}
+
+		return m, nil
 
 	case updateResultMsg:
-		m.updating = false
-
 		if msg.Err != nil {
-			m.statusMessage = "Update failed: " + msg.Err.Error()
-		} else {
 			m.statusMessage = msg.Status
+			return m, nil
 		}
+
+		if err := restartTUI(msg.Executable); err != nil {
+			m.statusMessage = fmt.Sprintf("Restart failed: %v", err)
+			return m, nil
+		}
+
+		return m, nil
 	case updateCheckTickMsg:
 		m.statusMessage = "Checking for updates...."
 		return m, tea.Batch(
@@ -296,7 +337,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case "r":
 		return runDockerCommand("Restarting Docker services...", "compose", "restart")
 	case "o":
-		return runDockerCommand("Starting Docker services...", "compose", "up", "-d")
+		return runDockerCommand("Starting Docker services...", "compose", "up", "-d", "--pull", "always")
 	case "x":
 		return runDockerCommand("Stopping Docker services...", "compose", "stop")
 	case "b":

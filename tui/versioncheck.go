@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,8 +34,9 @@ type versionCheckMsg struct {
 }
 
 type updateResultMsg struct {
-	Status string
-	Err    error
+	Status     string
+	Err        error
+	Executable string
 }
 
 func checkForUpdate() tea.Cmd {
@@ -206,6 +209,30 @@ func isNewerVersion(latest, current string) bool {
 	return false
 }
 
+// fileID identifies a file by device and inode, which stays stable across
+// renames. Comparing /proc/PID/exe targets by path breaks once the running
+// binary is renamed out from under a process (as happens during an update),
+// because the /proc magic symlink then resolves to the new path of that
+// same file. Comparing by inode instead is rename-proof.
+type fileID struct {
+	Dev uint64
+	Ino uint64
+}
+
+func getFileID(path string) (fileID, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fileID{}, err
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fileID{}, fmt.Errorf("cannot determine inode for %s", path)
+	}
+
+	return fileID{Dev: uint64(stat.Dev), Ino: stat.Ino}, nil
+}
+
 func updateTUI(downloadURL string) tea.Cmd {
 	return func() tea.Msg {
 		executable, err := os.Executable()
@@ -214,6 +241,13 @@ func updateTUI(downloadURL string) tea.Cmd {
 		}
 
 		executable, err = filepath.EvalSymlinks(executable)
+		if err != nil {
+			return updateResultMsg{Err: err}
+		}
+
+		// Capture the identity of the currently running binary before we
+		// touch it. The inode survives the rename below, unlike the path.
+		oldID, err := getFileID(executable)
 		if err != nil {
 			return updateResultMsg{Err: err}
 		}
@@ -299,10 +333,80 @@ func updateTUI(downloadURL string) tea.Cmd {
 			}
 		}
 
-		_ = os.Remove(backupPath)
-
+		//_ = os.Remove(backupPath)
+		restartOtherInstances(oldID)
 		return updateResultMsg{
-			Status: "TUI updated successfully. Restart the application.",
+			Status:     "TUI updated successfully.",
+			Executable: executable,
 		}
 	}
+}
+func restartTUI(executable string) error {
+	if executable == "" {
+		return fmt.Errorf("executable path is empty")
+	}
+
+	return syscall.Exec(
+		executable,
+		os.Args,
+		os.Environ(),
+	)
+}
+
+func findTUIInstances(target fileID) []int {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+
+	currentPID := os.Getpid()
+	var pids []int
+
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+
+		if pid == currentPID {
+			continue
+		}
+
+		// os.Stat follows the /proc/PID/exe symlink and reports the
+		// identity of the file the process is actually running, even if
+		// that file has since been renamed.
+		id, err := getFileID(filepath.Join("/proc", entry.Name(), "exe"))
+		if err != nil {
+			continue
+		}
+
+		if id == target {
+			pids = append(pids, pid)
+		}
+	}
+
+	return pids
+}
+func restartOtherInstances(target fileID) {
+	pids := findTUIInstances(target)
+
+	for _, pid := range pids {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			continue
+		}
+
+		_ = process.Signal(syscall.SIGUSR1)
+	}
+}
+func setupRestartSignal(program *tea.Program) {
+	restartSignal := make(chan os.Signal, 1)
+
+	signal.Notify(restartSignal, syscall.SIGUSR1)
+
+	go func() {
+		for range restartSignal {
+			program.Send(restartMsg{})
+		}
+	}()
 }
